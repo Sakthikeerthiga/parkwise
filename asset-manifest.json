@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/parkwise/static/css/main.8251e6ce.css",
-    "main.js": "/parkwise/static/js/main.56a18e87.js",
+    "main.js": "/parkwise/static/js/main.2d01bb0d.js",
     "static/js/453.7a9de3b4.chunk.js": "/parkwise/static/js/453.7a9de3b4.chunk.js",
     "index.html": "/parkwise/index.html",
     "main.8251e6ce.css.map": "/parkwise/static/css/main.8251e6ce.css.map",
-    "main.56a18e87.js.map": "/parkwise/static/js/main.56a18e87.js.map",
+    "main.2d01bb0d.js.map": "/parkwise/static/js/main.2d01bb0d.js.map",
     "453.7a9de3b4.chunk.js.map": "/parkwise/static/js/453.7a9de3b4.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.8251e6ce.css",
-    "static/js/main.56a18e87.js"
+    "static/js/main.2d01bb0d.js"
   ]
 }
