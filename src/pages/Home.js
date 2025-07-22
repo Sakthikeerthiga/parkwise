@@ -1,17 +1,18 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { FaCrosshairs, FaSearch } from 'react-icons/fa';
-import { useNavigate } from 'react-router-dom';
+import { FaCrosshairs, FaMapMarkerAlt, FaSearch } from 'react-icons/fa';
+import { Link, useNavigate } from 'react-router-dom';
 import ParkingMap from '../components/ParkingMap';
 
-const staticSuggestions = [
-  { label: 'Use Current Location', icon: <FaCrosshairs className="me-2 text-primary" />, isCurrent: true },
-  { label: 'Paris Charles de Gaulle Airport (CDG)', icon: <FaSearch className="me-2" /> },
-  { label: 'Paris Expo Porte de Versailles', icon: <FaSearch className="me-2" /> },
-  { label: 'La Défense Arena, Nanterre', icon: <FaSearch className="me-2" /> },
-  { label: 'Orly (ORY), Paris', icon: <FaSearch className="me-2" /> },
-];
+const vehicleTypes = ['STANDARD', 'ELECTRIC_CAR', 'MOTOR_BIKE', 'DISABLED'];
+
+function formatVehicleTypeForDisplay(type) {
+  return type
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
 
 function formatDate(date) {
   if (!date) return '';
@@ -33,9 +34,27 @@ function Home() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [arriving, setArriving] = useState(new Date());
   const [leaving, setLeaving] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000)); // 2 hours later
+  const [currentLocation, setCurrentLocation] = useState({ lat: null, lng: null });
+  const [locationError, setLocationError] = useState('');
+  const [locationName, setLocationName] = useState('');
   const datePickerRef = useRef(null);
   const now = new Date();
   const navigate = useNavigate();
+  const [parkingResults, setParkingResults] = useState([]);
+  const [eventWarning, setEventWarning] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selectedVehicleType, setSelectedVehicleType] = useState('STANDARD'); // Default value
+  const [placeSuggestions, setPlaceSuggestions] = useState([]);
+  const [selectedPlace, setSelectedPlace] = useState(null); // { name, lat, lon }
+  const [popularSpots, setPopularSpots] = useState([]);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/parking-spots?limit=6')
+      .then(res => res.json())
+      .then(data => setPopularSpots(data));
+  }, []);
+
+  // REMOVED useEffect to fetch vehicle types from API
 
   // Helper for minTime logic
   function getMinTime(date) {
@@ -49,17 +68,138 @@ function Home() {
   function getLeavingMinTime() {
     if (!arriving || !leaving) return now;
     const isSameDay = arriving.toDateString() === leaving.toDateString();
-    if (isSameDay) {
-      return arriving;
-    }
-    return new Date(leaving.setHours(0, 0, 0, 0));
+    if (isSameDay) return arriving;
+    // Clone leaving before setHours
+    const leavingClone = new Date(leaving);
+    leavingClone.setHours(0, 0, 0, 0);
+    return leavingClone;
   }
 
+  // Helper to get max leaving time (24 hours after arriving)
+  function getLeavingMaxTime() {
+    if (!arriving || !leaving) return new Date(arriving.getTime() + 24 * 60 * 60 * 1000);
+    const maxLeaving = new Date(arriving.getTime() + 24 * 60 * 60 * 1000);
+    const isSameDay = leaving.toDateString() === maxLeaving.toDateString();
+    if (isSameDay) return maxLeaving;
+    // Clone leaving before setHours
+    const leavingClone = new Date(leaving);
+    leavingClone.setHours(23, 59, 59, 999);
+    return leavingClone;
+  }
+
+  // Helper for Arriving maxTime (end of day, clone first)
+  function getArrivingMaxTime() {
+    const clone = new Date(arriving);
+    clone.setHours(23, 59, 59, 999);
+    return clone;
+  }
+
+  // Auto-update leaving if arriving is after leaving
+  React.useEffect(() => {
+    if (leaving <= arriving) {
+      setLeaving(new Date(arriving.getTime() + 15 * 60 * 1000)); // 15 min after arriving
+    }
+  }, [arriving]);
+
   // Helper to determine if a place is selected
-  const isPlaceSelected = search && (
-    search === 'Use Current Location' ||
-    staticSuggestions.some(s => s.label === search)
-  );
+  const isPlaceSelected = !!selectedPlace || (search === 'Your Location' && currentLocation.lat && currentLocation.lng);
+
+  const MAPBOX_TOKEN = "pk.eyJ1IjoicGZhenppbm8iLCJhIjoiY2o1cnJ6enRuMHcxOTJxbm1panB1ZWtmMCJ9.puITqvSCjjxOs2FtBnmYzw";
+
+  // Fetch place suggestions from Mapbox
+  const fetchPlaceSuggestions = async (query) => {
+    if (!query) {
+      setPlaceSuggestions([]);
+      return;
+    }
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?autocomplete=true&language=en&limit=5&access_token=${MAPBOX_TOKEN}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      // Filter for results only in France
+      const filtered = (data.features || []).filter(feature => {
+        if (!feature.context) return false;
+        return feature.context.some(c => c.id.startsWith('country.') && c.text.toLowerCase() === 'france');
+      });
+      setPlaceSuggestions(filtered);
+    }
+  };
+
+  // Update search handler to fetch suggestions
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setShowDropdown(true);
+    setSelectedPlace(null);
+    fetchPlaceSuggestions(e.target.value);
+  };
+
+  // Handler for selecting a place suggestion (Mapbox)
+  const handleSelectPlace = (place) => {
+    setSearch(place.place_name);
+    setSelectedPlace({
+      name: place.place_name,
+      lat: place.center[1], // latitude
+      lng: place.center[0], // longitude
+    });
+    setShowDropdown(false);
+    setPlaceSuggestions([]);
+  };
+
+  // Handler for getting current location
+  const handleUseCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+          setLocationError('');
+          setSearch('Your Location');
+          setShowDropdown(false);
+        },
+        (error) => {
+          setLocationError('Unable to retrieve your location.');
+        }
+      );
+    } else {
+      setLocationError('Geolocation is not supported by this browser.');
+    }
+  };
+
+  // Helper: Haversine formula to calculate distance between two lat/lng points
+  function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a =
+      0.5 - Math.cos(dLat)/2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      (1 - Math.cos(dLon))/2;
+    return R * 2 * Math.asin(Math.sqrt(a));
+  }
+
+  const handleFindParking = () => {
+    let lat, lng;
+    if (selectedPlace) {
+      lat = selectedPlace.lat;
+      lng = selectedPlace.lng;
+    } else if (currentLocation.lat && currentLocation.lng) {
+      lat = currentLocation.lat;
+      lng = currentLocation.lng;
+    } else {
+      lat = 48.8566;
+      lng = 2.3522;
+    }
+    console.log('Navigating to /parking-list with:', { lat, lng, vehicleType: selectedVehicleType });
+    navigate('/parking-list', { 
+      state: { 
+        lat, 
+        lng, 
+        vehicleType: selectedVehicleType 
+      } 
+    });
+  };
 
   // Close dropdown on outside click
   React.useEffect(() => {
@@ -76,6 +216,8 @@ function Home() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showDropdown]);
 
+  // Remove reverse geocoding effect
+
   return (
     <div style={{ background: '#fff', minHeight: '100vh' }}>
       {/* Hero + Search Section */}
@@ -83,7 +225,7 @@ function Home() {
         className="d-flex flex-column align-items-center justify-content-center text-center"
         style={{
           minHeight: '60vh',
-          background: `url('/parking-bg.jpg') center center/cover no-repeat`,
+          background: `url('${process.env.PUBLIC_URL}/parking-bg.jpg') center center/cover no-repeat`,
           position: 'relative',
         }}
       >
@@ -99,9 +241,9 @@ function Home() {
             zIndex: 1,
           }}
         />
-        <div className="container" style={{ paddingTop: '1.5rem', paddingBottom: '0', position: 'relative', zIndex: 2, maxWidth: 900 }}>
+        <div className="container" style={{ paddingTop: '1.5rem', paddingBottom: '0', position: 'relative', zIndex: 2, maxWidth: 1200 }}>
           <h1 className="fw-bold mb-3" style={{ fontSize: '2.5rem', color: '#222', textShadow: '0 2px 8px rgba(255,255,255,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Smart Event-Aware Parking Prediction System
+            Smart Event Aware Parking Prediction System
           </h1>
           <p className="lead mb-4" style={{ color: '#222', fontWeight: 500, fontSize: '1.15rem', textShadow: '0 2px 8px rgba(255,255,255,0.5)' }}>
             Predict future parking availability near you based on real-time data and city events
@@ -116,9 +258,9 @@ function Home() {
                 className="form-control border-start-0"
                 placeholder="Where are you going?"
                 value={search}
-                onChange={e => { setSearch(e.target.value); setShowDropdown(true); }}
+                onChange={handleSearchChange}
                 onFocus={() => setShowDropdown(true)}
-                style={{ borderLeft: 0 }}
+                style={{ fontSize: "15px", borderLeft: 0, color: search === 'Your Location' ? '#1976d2' : undefined, fontWeight: search === 'Your Location' ? 600 : undefined }}
                 autoComplete="off"
               />
               {search && (
@@ -126,7 +268,7 @@ function Home() {
                   className="btn btn-link px-2"
                   style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', zIndex: 11, color: '#888' }}
                   tabIndex={-1}
-                  onClick={() => { setSearch(''); setShowDropdown(false); }}
+                  onClick={() => { setSearch(''); setShowDropdown(false); setPlaceSuggestions([]); setSelectedPlace(null); }}
                 >
                   &times;
                 </button>
@@ -139,37 +281,29 @@ function Home() {
                   <button
                     className="dropdown-item d-flex align-items-center py-2 mb-0"
                     style={{ fontWeight: 600, color: '#1976d2', background: 'transparent', border: 'none', outline: 'none', paddingLeft: 0 }}
-                    onMouseDown={() => { setSearch('Use Current Location'); setShowDropdown(false); }}
+                    onMouseDown={handleUseCurrentLocation}
                   >
                     <FaCrosshairs className="me-2 text-primary" />
                     <span>Use Current Location</span>
                   </button>
                 </div>
-                {/* Places label and suggestions */}
-                {search.trim() && staticSuggestions.filter(s => !s.isCurrent && s.label.toLowerCase().includes(search.toLowerCase())).length > 0 && (
+                {/* Place suggestions from Nominatim (Paris only) */}
+                {placeSuggestions.length > 0 && (
                   <>
-                    <div className="px-3 pt-2 pb-1 text-secondary text-start" style={{ fontSize: '1rem', fontWeight: 500 }}>Places</div>
+                    <div className="px-3 pt-2 pb-1 text-secondary text-start" style={{ fontSize: '1rem', fontWeight: 500 }}>Places in Paris</div>
                     <div style={{ maxHeight: 180, overflowY: 'auto' }}>
-                      {staticSuggestions.filter(s => !s.isCurrent && s.label.toLowerCase().includes(search.toLowerCase())).map((s, idx) => {
-                        // Bold the matching part
-                        const matchIdx = s.label.toLowerCase().indexOf(search.toLowerCase());
-                        let before = s.label.slice(0, matchIdx);
-                        let match = s.label.slice(matchIdx, matchIdx + search.length);
-                        let after = s.label.slice(matchIdx + search.length);
-                        return (
-                          <button
-                            key={idx}
-                            className="dropdown-item d-flex align-items-center py-2"
-                            style={{ fontWeight: 400, color: '#222', background: 'transparent', border: 'none', outline: 'none', paddingLeft: 0 }}
-                            onMouseDown={() => { setSearch(s.label); setShowDropdown(false); }}
-                          >
-                            {s.icon}
-                            <span>
-                              {before}<b>{match}</b>{after}
-                            </span>
-                          </button>
-                        );
-                      })}
+                      {placeSuggestions.map((place, idx) => (
+                        <button
+                          key={place.id || idx}
+                          className="dropdown-item d-flex align-items-center py-2"
+                          style={{ fontWeight: 400, color: '#222', background: 'transparent', border: 'none', outline: 'none', paddingLeft: 0 }}
+                          onMouseDown={() => handleSelectPlace(place)}
+                          title={place.place_name}
+                        >
+                          <FaMapMarkerAlt className="me-2" style={{ color: '#1976d2', marginTop: 2 }} />
+                          <span>{place.place_name}</span>
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}
@@ -179,6 +313,25 @@ function Home() {
               </div>
             )}
           </div>
+
+          {/* Vehicle Type Dropdown, Arriving and Leaving Pickers - ONLY VISIBLE IF PLACE SELECTED */}
+          {isPlaceSelected && (
+            <div className="mb-3 mx-auto" style={{ maxWidth: 540 }}>
+              <label className="form-label text-dark fw-semibold mb-1" style={{ fontSize: '1.1rem', marginLeft: '0.25rem' }}>Vehicle Type</label>
+              <div className="input-group input-group-lg shadow rounded bg-white" style={{ border: '1px solid #ced4da', width: '100%' }}>
+                <select 
+                  className="form-select form-select-lg border-0 bg-white" 
+                  style={{ fontSize: '15px', padding: '0.75rem 1rem' }}
+                  value={selectedVehicleType} 
+                  onChange={(e) => setSelectedVehicleType(e.target.value)}
+                >
+                  {vehicleTypes.map(type => (
+                    <option key={type} value={type}>{formatVehicleTypeForDisplay(type)}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Arriving and Leaving Pickers - always reserve space, fade in/out */}
           <div style={{ minHeight: 220, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', marginBottom: '0.5rem' }}>
@@ -209,7 +362,7 @@ function Home() {
                         calendarClassName="w-100"
                         minDate={now}
                         minTime={getMinTime(arriving)}
-                        maxTime={new Date(arriving.setHours(23, 59, 59, 999))}
+                        maxTime={getArrivingMaxTime()}
                       />
                     </div>
                     {/* Leaving */}
@@ -226,15 +379,34 @@ function Home() {
                         calendarClassName="w-100"
                         minDate={arriving || now}
                         minTime={getLeavingMinTime()}
-                        maxTime={new Date(leaving.setHours(23, 59, 59, 999))}
+                        maxTime={getLeavingMaxTime()}
+                        maxDate={new Date(arriving.getTime() + 24 * 60 * 60 * 1000)}
                       />
                     </div>
                   </div>
                   <button className="btn btn-primary btn-lg w-100 rounded-pill fw-semibold" style={{ fontSize: '1.25rem' }}
-                    onClick={() => navigate('/parking-list')}
+                    onClick={handleFindParking}
                   >
                     Find Parking Spots
                   </button>
+                  {/* Show event warning if any */}
+                  {eventWarning && (
+                    <div className="alert alert-warning mt-3 text-center">{eventWarning}</div>
+                  )}
+                  {/* Show parking results */}
+                  {parkingResults.length > 0 && (
+                    <div className="mt-4">
+                      <h4>Available Parking Spots</h4>
+                      <ul className="list-group">
+                        {parkingResults.map(spot => (
+                          <li key={spot.id} className="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{spot.name}</span>
+                            <span>{spot.free_places} free</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -287,30 +459,58 @@ function Home() {
           <div className="row g-0 bg-white rounded-4 shadow-sm align-items-center overflow-hidden mx-0" style={{ minHeight: 320, padding: '39px' }}>
             {/* Image on the left */}
             <div className="col-12 col-md-5 d-flex justify-content-center align-items-center p-0" style={{ background: '#f3f3f3' }}>
-              <img src="/eiffel.jpg" alt="Eiffel Tower Paris" style={{ width: '100%', height: '100%', maxHeight: 400, objectFit: 'cover' }} />
+              <img src={process.env.PUBLIC_URL + '/eiffel.jpg'} alt="Eiffel Tower Paris" style={{ width: '100%', height: '100%', maxHeight: 400, objectFit: 'cover' }} />
             </div>
             {/* Text and parking list on the right */}
             <div className="col-12 col-md-7 p-4 p-md-5">
-              <h3 className="fw-bold mb-2" style={{ fontSize: '2rem', color: '#222' }}>Popular Parking Spots</h3>
+              <h2 className="fw-bold mb-2" style={{ fontSize: '2rimage.pngem', color: '#222' }}>Popular Parking Spots</h2>
               <div className="mb-3" style={{ fontSize: '1.15rem', color: '#444' }}>
                 Enjoy the convenience of booking a parking spot at the venue ahead of time, ensuring you have a space when you arrive for games, concerts, and more.
               </div>
               <div className="mb-4" style={{ maxWidth: 400 }}>
-                <a href="#" className="d-block mb-3 fw-semibold text-primary" style={{ fontSize: '1.15rem', textDecoration: 'underline' }}>Book Madison Square Garden Parking</a>
-                <a href="#" className="d-block mb-3 fw-semibold text-primary" style={{ fontSize: '1.15rem', textDecoration: 'underline' }}>Book Oracle Park Stadium Parking</a>
-                <a href="#" className="d-block mb-3 fw-semibold text-primary" style={{ fontSize: '1.15rem', textDecoration: 'underline' }}>Book SoFi Stadium Parking</a>
-                <a href="#" className="d-block mb-3 fw-semibold text-primary" style={{ fontSize: '1.15rem', textDecoration: 'underline' }}>Book Soldier Field Parking</a>
-                <a href="#" className="d-block mb-3 fw-semibold text-primary" style={{ fontSize: '1.15rem', textDecoration: 'underline' }}>Book TD Garden Parking</a>
-                <a href="#" className="d-block mb-4 fw-semibold text-primary" style={{ fontSize: '1.15rem', textDecoration: 'underline' }}>Book Rogers Centre Parking</a>
+                {popularSpots.map(spot => (
+                  <div key={spot.facilityid || spot.id}>
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${spot.latitude},${spot.longitude}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="d-block mb-3 fw-semibold text-primary"
+                      style={{ fontSize: '1.15rem', textDecoration: 'underline' }}
+                    >
+                      {spot.nom_parking || spot.name}
+                    </a>
+                  </div>
+                ))}
               </div>
-              <button className="btn btn-primary btn-lg rounded-pill fw-semibold px-5" style={{ fontSize: '1.15rem' }}>
+              <Link to="/all-parking" className="btn btn-primary btn-lg rounded-pill fw-semibold px-5" style={{ fontSize: '1.15rem' }}>
                 View All Parking
-              </button>
+              </Link>
             </div>
           </div>
         </div>
       </section>
-      <ParkingMap />
+
+      {/* Add the map here */}
+      <div style={{
+        width: '100%',
+        // maxWidth: 1200,
+        margin: '32px auto',
+        background: '#e9f5ff',
+        borderRadius: 12,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
+        padding: 0
+      }}>
+        <div style={{ width: '100%', height: 400 }}>
+          <ParkingMap spots={popularSpots.filter(
+            spot => spot.latitude !== undefined && spot.longitude !== undefined &&
+                    !isNaN(Number(spot.latitude)) && !isNaN(Number(spot.longitude))
+          )} />
+        </div>
+      </div>
+      {/* No current location display below */}
+      {locationError && (
+        <div className="alert alert-danger mt-3 text-center">{locationError}</div>
+      )}
     </div>
   );
 }

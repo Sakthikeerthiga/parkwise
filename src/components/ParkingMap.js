@@ -1,6 +1,6 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
 
 // Fix default icon issue with Leaflet in React
@@ -11,39 +11,73 @@ const DefaultIcon = L.icon({
   iconUrl,
   shadowUrl: iconShadow,
   iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
 });
+
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Static parking locations (Paris)
-const parkingSpots = [
-  { id: 1, name: 'Parking Indigo Paris Haussmann', lat: 48.872, lng: 2.332 },
-  { id: 2, name: 'Parking Saint-Lazare', lat: 48.876, lng: 2.326 },
-  { id: 3, name: 'Parking Opéra-Meyerbeer', lat: 48.872, lng: 2.332 },
-  { id: 4, name: 'Parking Madeleine-Tronchet', lat: 48.870, lng: 2.324 },
-  { id: 5, name: 'Parking Vinci Park', lat: 48.866, lng: 2.331 },
-];
+export default function ParkingMap({ spots, selectedSpot }) {
+  const mapRef = useRef(null);
+  const markerRefs = useRef({});
 
-export default function ParkingMap() {
+  const defaultCenter = [48.8566, 2.3522]; // Paris center
+  const defaultZoom = 13;
+
+  useEffect(() => {
+    if (selectedSpot && markerRefs.current[selectedSpot.id]) {
+      markerRefs.current[selectedSpot.id].openPopup();
+      if(mapRef.current){
+        mapRef.current.flyTo([selectedSpot.lat, selectedSpot.lng], 15);
+      }
+    }
+  }, [selectedSpot]);
+
+
+  const center = spots && spots.length > 0
+    ? [spots[0].lat, spots[0].lng]
+    : defaultCenter;
+
   return (
-    <section className="py-5" style={{ background: '#e9f5ff' ,paddingTop: '0px !important',paddingBottom: '0px !important'}}>
-      <div className="container-fluid px-0">
-        {/* <h2 className="fw-bold mb-4 text-center" style={{ fontSize: '2.1rem' }}>Nearby Parking Map</h2> */}
-        <div style={{ width: '100%', height: '420px' }}>
-          <MapContainer center={[48.870, 2.332]} zoom={13} scrollWheelZoom={true} style={{ width: '100%', height: '100%' }}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {parkingSpots.map(spot => (
-              <Marker key={spot.id} position={[spot.lat, spot.lng]} icon={DefaultIcon}>
-                <Popup>
-                  <b>{spot.name}</b>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
-        </div>
-      </div>
-    </section>
+    <div style={{ width: '100%', height: '100%' }}>
+      <MapContainer 
+        ref={mapRef}
+        center={center} 
+        zoom={defaultZoom} 
+        scrollWheelZoom={true} 
+        style={{ width: '100%', height: '100%' }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {spots && spots
+          .filter(spot =>
+            spot.latitude !== undefined && spot.longitude !== undefined &&
+            !isNaN(Number(spot.latitude)) && !isNaN(Number(spot.longitude))
+          )
+          .map(spot => (
+            <Marker 
+              key={spot.id || spot.facilityid} 
+              position={[Number(spot.latitude), Number(spot.longitude)]}
+              ref={el => markerRefs.current[spot.id || spot.facilityid] = el}
+            >
+              <Popup>
+                <b>{spot.name || spot.nom_parking}</b>
+                <br />
+                {spot.rating && <>Rating: {spot.rating}<br /></>}
+                {spot.free_places !== undefined && <>Free Spaces: {spot.free_places}<br /></>}
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${spot.latitude},${spot.longitude}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#1976d2', fontWeight: 600, textDecoration: 'underline' }}
+                >
+                  Directions
+                </a>
+              </Popup>
+            </Marker>
+        ))}
+      </MapContainer>
+    </div>
   );
 } 
