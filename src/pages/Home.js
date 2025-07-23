@@ -14,35 +14,16 @@ function formatVehicleTypeForDisplay(type) {
     .join(' ');
 }
 
-function formatDate(date) {
-  if (!date) return '';
-  return date.toISOString().slice(0, 10);
-}
-
-function formatTime(date) {
-  if (!date) return '';
-  let hour = date.getHours();
-  const min = date.getMinutes().toString().padStart(2, '0');
-  const ampm = hour >= 12 ? 'PM' : 'AM';
-  hour = hour % 12 || 12;
-  return `${hour}:${min} ${ampm}`;
-}
-
 function Home() {
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [arriving, setArriving] = useState(new Date());
   const [leaving, setLeaving] = useState(new Date(Date.now() + 2 * 60 * 60 * 1000)); // 2 hours later
   const [currentLocation, setCurrentLocation] = useState({ lat: null, lng: null });
   const [locationError, setLocationError] = useState('');
-  const [locationName, setLocationName] = useState('');
   const datePickerRef = useRef(null);
   const now = new Date();
   const navigate = useNavigate();
-  const [parkingResults, setParkingResults] = useState([]);
-  const [eventWarning, setEventWarning] = useState("");
-  const [loading, setLoading] = useState(false);
   const [selectedVehicleType, setSelectedVehicleType] = useState('STANDARD'); // Default value
   const [placeSuggestions, setPlaceSuggestions] = useState([]);
   const [selectedPlace, setSelectedPlace] = useState(null); // { name, lat, lon }
@@ -390,22 +371,10 @@ function Home() {
                     Find Parking Spots
                   </button>
                   {/* Show event warning if any */}
-                  {eventWarning && (
-                    <div className="alert alert-warning mt-3 text-center">{eventWarning}</div>
-                  )}
                   {/* Show parking results */}
-                  {parkingResults.length > 0 && (
-                    <div className="mt-4">
-                      <h4>Available Parking Spots</h4>
-                      <ul className="list-group">
-                        {parkingResults.map(spot => (
-                          <li key={spot.id} className="list-group-item d-flex justify-content-between align-items-center">
-                            <span>{spot.name}</span>
-                            <span>{spot.free_places} free</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                  {/* No current location display below */}
+                  {locationError && (
+                    <div className="alert alert-danger mt-3 text-center">{locationError}</div>
                   )}
                 </>
               )}

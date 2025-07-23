@@ -271,13 +271,13 @@ function Signup() {
               />
               <span style={{ fontSize: '13px', color: '#6c757d', lineHeight: '1.4' }}>
                 I agree to the{' '}
-                <a href="#" style={{ color: '#1886ff', textDecoration: 'none' }}>
+                <span style={{ color: '#1886ff', textDecoration: 'underline', cursor: 'pointer' }}>
                   Terms of Service
-                </a>{' '}
+                </span>{' '}
                 and{' '}
-                <a href="#" style={{ color: '#1886ff', textDecoration: 'none' }}>
+                <span style={{ color: '#1886ff', textDecoration: 'underline', cursor: 'pointer' }}>
                   Privacy Policy
-                </a>
+                </span>
               </span>
             </label>
           </div>
