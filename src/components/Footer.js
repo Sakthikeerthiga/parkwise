@@ -8,9 +8,9 @@ export default function Footer() {
           <span className="fw-bold">ParkWise</span> &copy; {new Date().getFullYear()} All rights reserved.
         </div>
         <div>
-          <a href="#" className="text-light me-3 text-decoration-none">Privacy Policy</a>
-          <a href="#" className="text-light me-3 text-decoration-none">Terms of Service</a>
-          <a href="#" className="text-light text-decoration-none">Contact</a>
+        <span className="text-light me-3 text-decoration-none" style={{ cursor: 'pointer', textDecoration: 'underline' }}>Privacy Policy</span>
+          <span className="text-light me-3 text-decoration-none" style={{ cursor: 'pointer', textDecoration: 'underline' }}>Terms of Service</span>
+          <span className="text-light text-decoration-none" style={{ cursor: 'pointer', textDecoration: 'underline' }}>Contact</span>
         </div>
       </div>
     </footer>
