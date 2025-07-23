@@ -51,6 +51,7 @@ function ParkingSpotsList() {
   // Infinite scroll observer
   useEffect(() => {
     if (!hasMore || loading) return;
+    const currentLoader = loader.current;
     const observer = new window.IntersectionObserver(
       entries => {
         if (entries[0].isIntersecting) {
@@ -59,9 +60,9 @@ function ParkingSpotsList() {
       },
       { threshold: 1 }
     );
-    if (loader.current) observer.observe(loader.current);
+    if (currentLoader) observer.observe(currentLoader);
     return () => {
-      if (loader.current) observer.unobserve(loader.current);
+      if (currentLoader) observer.unobserve(currentLoader);
     };
   }, [hasMore, loading]);
 
