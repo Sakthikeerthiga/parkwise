@@ -50,7 +50,7 @@ function ParkingSpotsList() {
   // Infinite scroll observer
   useEffect(() => {
     if (!hasMore || loading) return;
-    const currentLoader = loader.current;
+    const currentLoader = loader.current; // <--- Copy ref at the start
     const observer = new window.IntersectionObserver(
       entries => {
         if (entries[0].isIntersecting) {

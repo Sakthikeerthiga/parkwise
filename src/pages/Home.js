@@ -99,7 +99,7 @@ function Home() {
     if (leaving <= arriving) {
       setLeaving(new Date(arriving.getTime() + 15 * 60 * 1000)); // 15 min after arriving
     }
-  }, [arriving]);
+  }, [arriving, leaving]);
 
   // Helper to determine if a place is selected
   const isPlaceSelected = !!selectedPlace || (search === 'Your Location' && currentLocation.lat && currentLocation.lng);
