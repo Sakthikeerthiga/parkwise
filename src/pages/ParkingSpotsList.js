@@ -27,7 +27,6 @@ function ParkingSpotsList() {
   const [hovered, setHovered] = useState(null);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  const [showDropdown, setShowDropdown] = useState(false);
   const [noResults, setNoResults] = useState(false);
   const loader = useRef(null);
 
@@ -67,13 +66,6 @@ function ParkingSpotsList() {
   }, [hasMore, loading]);
 
   // Search functionality
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
-    setShowDropdown(false);
-    setNoResults(false);
-    setSearchResults([]);
-  };
-
   const handleSearch = async () => {
     if (!search) {
       setSearchResults([]);
@@ -95,7 +87,6 @@ function ParkingSpotsList() {
     );
     setSpots(filtered);
     setLoading(false);
-    setShowDropdown(false);
     setNoResults(filtered.length === 0);
   };
 
@@ -106,13 +97,6 @@ function ParkingSpotsList() {
     setSpots([]);
     setHasMore(true);
     fetchSpots();
-  };
-
-  const handleSuggestionClick = (spot) => {
-    setSearch(spot.nom_parking || spot.name);
-    setSpots([spot]);
-    setShowDropdown(false);
-    setNoResults(false);
   };
 
   return (
