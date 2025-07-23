@@ -32,15 +32,30 @@ function ParkingList() {
         })
         .then(apiData => {
           // The API returns a simple array, so we map it to the structure our component expects.
-          const formattedSpots = apiData.map(spot => ({
-            id: spot.id,
-            name: spot.name,
-            distance_km: spot.distance_km,
-            free_places: spot.free_places,
-            // --- The map will NOT work correctly until your API provides lat/lng for each spot ---
-            lat: spot.lat || lat, // Use spot's lat/lng if available, otherwise fallback to search center
-            lng: spot.lon || lng,  // Note: API might use 'lon' or 'lng'
-          }));
+          const formattedSpots = apiData
+            .map(spot => {
+              // Only map if valid lat/lng/latitude/longitude present
+              const latitude = spot.latitude ?? spot.lat ?? null;
+              const longitude = spot.longitude ?? spot.lng ?? spot.lon ?? null;
+              if (
+                latitude === null ||
+                longitude === null ||
+                isNaN(Number(latitude)) ||
+                isNaN(Number(longitude))
+              ) {
+                return null;
+              }
+              return {
+                id: spot.id,
+                name: spot.name,
+                distance_km: spot.distance_km,
+                free_places: spot.free_places,
+                image_url: spot.image_url,
+                latitude: Number(latitude),
+                longitude: Number(longitude),
+              };
+            })
+            .filter(Boolean); // Remove nulls
           setParkingSpots(formattedSpots);
           setLoading(false);
         })
@@ -69,6 +84,23 @@ function ParkingList() {
 
   if (loading) return <div style={{ textAlign: 'center', paddingTop: '10rem' }}>Loading...</div>;
   if (error) return <div style={{ color: 'red', textAlign: 'center', paddingTop: '10rem' }}>Error: {error}</div>;
+
+  // Defensive: Only allow valid selectedSpot
+  const validSpots = parkingSpots.filter(
+    spot =>
+      spot.latitude !== undefined &&
+      spot.longitude !== undefined &&
+      !isNaN(Number(spot.latitude)) &&
+      !isNaN(Number(spot.longitude))
+  );
+  const validSelectedSpot = selectedSpot &&
+    selectedSpot.latitude !== undefined &&
+    selectedSpot.longitude !== undefined &&
+    !isNaN(Number(selectedSpot.latitude)) &&
+    !isNaN(Number(selectedSpot.longitude))
+    ? selectedSpot : null;
+
+  console.log('Invalid spots:', parkingSpots.filter(spot => !spot.latitude || !spot.longitude));
 
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 70px)', backgroundColor: '#f0f2f5' }}>
@@ -141,7 +173,7 @@ function ParkingList() {
 
       {/* Right Panel: Map */}
       <div style={{ width: '60%', height: '100%' }}>
-        <ParkingMap spots={parkingSpots} selectedSpot={selectedSpot} />
+        <ParkingMap spots={validSpots} selectedSpot={validSelectedSpot} />
       </div>
     </div>
   );

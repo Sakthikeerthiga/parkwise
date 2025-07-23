@@ -23,19 +23,34 @@ export default function ParkingMap({ spots, selectedSpot }) {
   const defaultCenter = [48.8566, 2.3522]; // Paris center
   const defaultZoom = 13;
 
+  // Defensive: Only use valid spots
+  const validSpots = (spots || []).filter(
+    spot =>
+      spot.latitude !== undefined &&
+      spot.longitude !== undefined &&
+      !isNaN(Number(spot.latitude)) &&
+      !isNaN(Number(spot.longitude))
+  );
+
+  const center = validSpots.length > 0
+    ? [validSpots[0].latitude, validSpots[0].longitude]
+    : defaultCenter;
+
   useEffect(() => {
-    if (selectedSpot && markerRefs.current[selectedSpot.id]) {
+    if (
+      selectedSpot &&
+      selectedSpot.latitude !== undefined &&
+      selectedSpot.longitude !== undefined &&
+      !isNaN(Number(selectedSpot.latitude)) &&
+      !isNaN(Number(selectedSpot.longitude)) &&
+      markerRefs.current[selectedSpot.id]
+    ) {
       markerRefs.current[selectedSpot.id].openPopup();
       if(mapRef.current){
-        mapRef.current.flyTo([selectedSpot.lat, selectedSpot.lng], 15);
+        mapRef.current.flyTo([selectedSpot.latitude, selectedSpot.longitude], 15);
       }
     }
   }, [selectedSpot]);
-
-
-  const center = spots && spots.length > 0
-    ? [spots[0].lat, spots[0].lng]
-    : defaultCenter;
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
@@ -50,32 +65,27 @@ export default function ParkingMap({ spots, selectedSpot }) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {spots && spots
-          .filter(spot =>
-            spot.latitude !== undefined && spot.longitude !== undefined &&
-            !isNaN(Number(spot.latitude)) && !isNaN(Number(spot.longitude))
-          )
-          .map(spot => (
-            <Marker 
-              key={spot.id || spot.facilityid} 
-              position={[Number(spot.latitude), Number(spot.longitude)]}
-              ref={el => markerRefs.current[spot.id || spot.facilityid] = el}
-            >
-              <Popup>
-                <b>{spot.name || spot.nom_parking}</b>
-                <br />
-                {spot.rating && <>Rating: {spot.rating}<br /></>}
-                {spot.free_places !== undefined && <>Free Spaces: {spot.free_places}<br /></>}
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${spot.latitude},${spot.longitude}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ color: '#1976d2', fontWeight: 600, textDecoration: 'underline' }}
-                >
-                  Directions
-                </a>
-              </Popup>
-            </Marker>
+        {validSpots.map(spot => (
+          <Marker 
+            key={spot.id || spot.facilityid} 
+            position={[Number(spot.latitude), Number(spot.longitude)]}
+            ref={el => markerRefs.current[spot.id || spot.facilityid] = el}
+          >
+            <Popup>
+              <b>{spot.name || spot.nom_parking}</b>
+              <br />
+              {spot.rating && <>Rating: {spot.rating}<br /></>}
+              {spot.free_places !== undefined && <>Free Spaces: {spot.free_places}<br /></>}
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&origin=Current+Location&destination=${spot.latitude},${spot.longitude}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#1976d2', fontWeight: 600, textDecoration: 'underline' }}
+              >
+                Directions
+              </a>
+            </Popup>
+          </Marker>
         ))}
       </MapContainer>
     </div>
